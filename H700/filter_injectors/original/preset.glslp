@@ -1,0 +1,10 @@
+shaders = 2
+
+shader0 = shaders/image-adjustment.glsl
+filter_linear0 = false
+
+shader1 = shaders/retro-v2.glsl
+filter_linear1 = false
+
+ia_monitor_gamma = "2.400000"
+RETRO_PIXEL_SIZE = "0.680000"

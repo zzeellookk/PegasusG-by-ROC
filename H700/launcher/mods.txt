@@ -1,0 +1,6 @@
+# Exact game titles that must appear in the GBA改版 tab.
+口袋妖怪 究极绿宝石
+口袋妖怪 剑盾
+口袋妖怪 漆黑的魅影 BW
+口袋妖怪 漆黑的魅影 DP
+银河战士 幽灵任务2 圣诞夜惊魂
