@@ -4,6 +4,9 @@ APP_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 STATE_DIR="$APP_DIR/data"
 REQUEST="$STATE_DIR/launch.request"
 LOG_FILE="$STATE_DIR/brick-port.log"
+RA_DIR="/mnt/SDCARD/RetroArch"
+RA_BIN="$RA_DIR/ra64.trimui"
+CORE_DIR="$APP_DIR/cores"
 GBA_DIR="/mnt/SDCARD/Emus/GBA"
 
 mkdir -p "$STATE_DIR"
@@ -33,6 +36,36 @@ toast() {
   fi
 }
 
+core_path() {
+  case "$1" in
+    gpsp|gpsp_rumble) printf '%s\n' "$CORE_DIR/gpsp_libretro.so" ;;
+    vbam) printf '%s\n' "$CORE_DIR/vbam_libretro.so" ;;
+    vba_next) printf '%s\n' "$CORE_DIR/vba_next_libretro.so" ;;
+    *) printf '%s\n' "$CORE_DIR/mgba_libretro.so" ;;
+  esac
+}
+
+launch_ra64() {
+  rom="$1"
+  core_file="$2"
+
+  [ -x "$RA_BIN" ] || { toast "缺少 64 位 RetroArch"; return 1; }
+  [ -f "$core_file" ] || { toast "缺少 64 位核心"; return 1; }
+
+  # 与 Brick 固件的 GBA 启动流程保持相同的性能设置。
+  if [ -f /mnt/SDCARD/System/scripts/common_launcher.sh ]; then
+    . /mnt/SDCARD/System/scripts/common_launcher.sh
+  fi
+  [ -x "$GBA_DIR/cpufreq.sh" ] && "$GBA_DIR/cpufreq.sh"
+  [ -x "$GBA_DIR/cpuswitch.sh" ] && "$GBA_DIR/cpuswitch.sh"
+
+  printf '[ra64] binary=%s core=%s rom=%s\n' "$RA_BIN" "$core_file" "$rom" >> "$LOG_FILE"
+  (
+    cd "$RA_DIR" || exit 1
+    HOME="$RA_DIR/" "$RA_BIN" -v -L "$core_file" "$rom"
+  ) >> "$LOG_FILE" 2>&1
+}
+
 launch_game() {
   [ -f "$REQUEST" ] || return 1
   rom="$(sed -n '1p' "$REQUEST")"
@@ -45,19 +78,17 @@ launch_game() {
   esac
   [ -f "$rom" ] || { toast "游戏文件不存在"; return 1; }
 
-  case "$core" in
-    gpsp|gpsp_rumble) launcher="launch_gpsp.sh" ;;
-    vbam) launcher="vbam.sh" ;;
-    vba_next) launcher="vbanext.sh" ;;
-    *) launcher="launch.sh" ;;
-  esac
-  [ -x "$GBA_DIR/$launcher" ] || {
-    toast "缺少 GBA 启动器：$launcher"
-    return 1
-  }
+  selected_core="$(core_path "$core")"
+  printf '[launcher] choice=%s core=%s rom=%s\n' "$core" "$selected_core" "$rom" >> "$LOG_FILE"
 
-  printf '[launcher] core=%s launcher=%s rom=%s\n' "$core" "$launcher" "$rom" >> "$LOG_FILE"
-  "$GBA_DIR/$launcher" "$rom" >> "$LOG_FILE" 2>&1
+  # 不在天马中解压 ROM；.gba、.zip 等路径原样交给 RetroArch。
+  launch_ra64 "$rom" "$selected_core"
+  launch_rc=$?
+  if [ "$launch_rc" -ne 0 ]; then
+    printf '[launcher] ra64 failed choice=%s rc=%s\n' "$core" "$launch_rc" >> "$LOG_FILE"
+    toast "64 位核心启动失败，请查看日志"
+    return 1
+  fi
 }
 
 restore_ui=""

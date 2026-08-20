@@ -102,7 +102,14 @@ jobs:
           test "$(find "$full/Apps/PegasusG/assets/music" -maxdepth 1 -type f -name '*.mp3' | wc -l)" -eq 11
           test -x "$update/Apps/PegasusG/pegasusg_by_roc"
           test ! -e "$full/Apps/PegasusG/ffmpeg"
-          test ! -e "$full/Apps/PegasusG/cores"
+          for core in mgba_libretro.so gpsp_libretro.so vbam_libretro.so vba_next_libretro.so; do
+            full_core="$full/Apps/PegasusG/cores/$core"
+            update_core="$update/Apps/PegasusG/cores/$core"
+            test -s "$full_core"
+            test -s "$update_core"
+            aarch64-linux-gnu-readelf -h "$full_core" | grep -q 'Class:.*ELF64'
+            aarch64-linux-gnu-readelf -h "$full_core" | grep -q 'Machine:.*AArch64'
+          done
           test ! -e "$full/System/starts/zz_pegasusg_autostart.sh"
           unzip -l "$full_archive"
           unzip -l "$update_archive"

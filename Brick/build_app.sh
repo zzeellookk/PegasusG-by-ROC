@@ -15,6 +15,7 @@ FULL_APP_DIR="$FULL_STAGE_ROOT/Apps/PegasusG"
 UPDATE_APP_DIR="$UPDATE_STAGE_ROOT/Apps/PegasusG"
 FULL_ARCHIVE="$DIST_ROOT/PegasusG-Brick-${VERSION}-Full.zip"
 UPDATE_ARCHIVE="$DIST_ROOT/PegasusG-Brick-${VERSION}-Update.zip"
+CORE_SOURCE_DIR="$SELF_DIR/cores"
 
 case "$OUTPUT" in Stage|Zip) ;; *) echo "OUTPUT must be Stage or Zip" >&2; exit 2 ;; esac
 [ -d "$SYSROOT/usr/include" ] || { echo "invalid Brick sysroot: $SYSROOT" >&2; exit 3; }
@@ -73,12 +74,22 @@ mkdir -p "$FULL_APP_DIR" "$UPDATE_APP_DIR"
 
 stage_runtime() {
   app_dir="$1"
+  mkdir -p "$app_dir/cores"
   cp "$BUILD_DIR/pegasusg_by_roc" "$app_dir/pegasusg_by_roc"
   cp "$SELF_DIR/launcher/launch.sh" "$app_dir/launch.sh"
   cp "$SELF_DIR/launcher/autostart_ctl.sh" "$app_dir/autostart_ctl.sh"
   cp "$SELF_DIR/launcher/autostart_launch.sh" "$app_dir/autostart_launch.sh"
+  for core in mgba_libretro.so gpsp_libretro.so vbam_libretro.so vba_next_libretro.so; do
+    [ -f "$CORE_SOURCE_DIR/$core" ] || {
+      echo "missing Brick AArch64 core: $CORE_SOURCE_DIR/$core" >&2
+      exit 4
+    }
+    cp "$CORE_SOURCE_DIR/$core" "$app_dir/cores/$core"
+  done
+  [ ! -f "$CORE_SOURCE_DIR/README.md" ] || cp "$CORE_SOURCE_DIR/README.md" "$app_dir/cores/README.md"
   printf '%s\n' "$VERSION" > "$app_dir/version.txt"
   chmod 755 "$app_dir/pegasusg_by_roc" "$app_dir/"*.sh
+  chmod 644 "$app_dir/cores/"*.so
 }
 
 stage_runtime "$FULL_APP_DIR"
@@ -117,6 +128,10 @@ common = [
     "autostart_ctl.sh",
     "autostart_launch.sh",
     "version.txt",
+    "cores/mgba_libretro.so",
+    "cores/gpsp_libretro.so",
+    "cores/vbam_libretro.so",
+    "cores/vba_next_libretro.so",
 ]
 full_required = common + [
     "config.json",
@@ -140,7 +155,7 @@ for app, required, label in (
 music = sorted((full_app / "assets" / "music").glob("*.mp3"))
 if len(music) != 11:
     raise SystemExit(f"[brick] full package expected 11 music tracks, found {len(music)}")
-for forbidden in ("ffmpeg", "cores", "tools"):
+for forbidden in ("ffmpeg", "tools"):
     if (full_app / forbidden).exists():
         raise SystemExit(f"[brick] stable full package contains forbidden experimental path: {forbidden}")
 if (full_stage / "System" / "starts" / "zz_pegasusg_autostart.sh").exists():
