@@ -34,6 +34,31 @@ On Windows with WSL:
 
 Output is created under `Brick/dist/`.
 
+## GitHub Actions package build
+
+`.github/workflows/brick-build.yml` builds an installable AArch64 ZIP after a
+push to `dev/brick` that changes `src/`, `Brick/` or the workflow itself. It can
+also be started manually from **Actions > Brick package > Run workflow**, with
+an optional package version.
+
+The target firmware sysroot remains outside Git. Configure these repository
+Actions secrets before running the workflow:
+
+- `BRICK_SYSROOT_URL` (required): a protected HTTPS download URL for a `.tar`,
+  `.tar.gz` or `.tar.zst` sysroot archive.
+- `BRICK_SYSROOT_SHA256` (recommended): the lowercase SHA-256 digest of that
+  archive.
+
+The archive must contain `usr/include` at its root or below one top-level
+directory. It must provide the same SDL2, SDL2_image, SDL2_ttf, ALSA and C/C++
+runtime files as the tested Brick firmware. Do not commit the archive, its URL
+or access credentials.
+
+Successful runs publish `PegasusG-Brick-<version>.zip` and its `.sha256` file
+as a workflow artifact retained for 30 days. Download the artifact from the
+completed Actions run; only promote it to a GitHub Release after completing the
+device checklist in `STABLE_BASELINE.md`.
+
 ## Experimental work
 
 `experimental/hotfix4-launcher/` contains the encoding-safe ZIP launcher and

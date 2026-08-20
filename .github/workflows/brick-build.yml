@@ -1,0 +1,126 @@
+name: Brick package
+
+on:
+  push:
+    branches: [dev/brick]
+    paths:
+      - ".github/workflows/brick-build.yml"
+      - "Brick/**"
+      - "src/**"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version (leave empty for a commit-based version)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brick-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build AArch64 package
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      BRICK_SYSROOT_URL: ${{ secrets.BRICK_SYSROOT_URL }}
+      BRICK_SYSROOT_SHA256: ${{ secrets.BRICK_SYSROOT_SHA256 }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install cross-build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-aarch64-linux-gnu pkg-config python3 unzip zstd
+
+      - name: Download and verify Brick sysroot
+        id: sysroot
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$BRICK_SYSROOT_URL" ]; then
+            echo "::error::Missing repository secret BRICK_SYSROOT_URL"
+            exit 1
+          fi
+
+          archive="$RUNNER_TEMP/brick-sysroot.archive"
+          extract_root="$RUNNER_TEMP/brick-sysroot"
+          mkdir -p "$extract_root"
+          curl --fail --location --retry 3 --retry-all-errors \
+            --output "$archive" "$BRICK_SYSROOT_URL"
+
+          if [ -n "$BRICK_SYSROOT_SHA256" ]; then
+            printf '%s  %s\n' "$BRICK_SYSROOT_SHA256" "$archive" | sha256sum --check --strict
+          fi
+
+          tar -xf "$archive" -C "$extract_root"
+          sysroot="$extract_root"
+          if [ ! -d "$sysroot/usr/include" ]; then
+            mapfile -t candidates < <(find "$extract_root" -mindepth 1 -maxdepth 3 \
+              -type d -path '*/usr/include' -printf '%h\n')
+            if [ "${#candidates[@]}" -ne 1 ]; then
+              echo "::error::The sysroot archive must contain usr/include at its root or under one top-level directory"
+              exit 1
+            fi
+            sysroot="${candidates[0]%/usr}"
+          fi
+
+          echo "path=$sysroot" >> "$GITHUB_OUTPUT"
+
+      - name: Build Brick install ZIP
+        id: build
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="$REQUESTED_VERSION"
+          if [ -z "$version" ]; then
+            version="dev-brick-${GITHUB_SHA::8}"
+          fi
+          if [[ ! "$version" =~ ^[0-9A-Za-z._-]+$ ]]; then
+            echo "::error::Version may contain only letters, numbers, dot, underscore and hyphen"
+            exit 1
+          fi
+
+          chmod +x Brick/build_app.sh
+          PEGASUSG_VERSION="$version" \
+          PEGASUSG_OUTPUT=Zip \
+          PEGASUSG_SYSROOT="${{ steps.sysroot.outputs.path }}" \
+            ./Brick/build_app.sh
+
+          archive="Brick/dist/PegasusG-Brick-${version}.zip"
+          test -f "$archive"
+          sha256sum "$archive" > "${archive}.sha256"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate package architecture and contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${{ steps.build.outputs.archive }}"
+          unpacked="$RUNNER_TEMP/brick-package"
+          unzip -q "$archive" -d "$unpacked"
+          binary="$unpacked/Apps/PegasusG/pegasusg_by_roc"
+          test -x "$binary"
+          aarch64-linux-gnu-readelf -h "$binary" | grep -q 'Machine:.*AArch64'
+          test -x "$unpacked/Apps/PegasusG/launch.sh"
+          test -s "$unpacked/Apps/PegasusG/version.txt"
+          unzip -l "$archive"
+
+      - name: Upload install package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PegasusG-Brick-${{ steps.build.outputs.version }}
+          path: |
+            ${{ steps.build.outputs.archive }}
+            ${{ steps.build.outputs.archive }}.sha256
+          if-no-files-found: error
+          retention-days: 30
