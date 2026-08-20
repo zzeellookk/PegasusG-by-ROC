@@ -49,7 +49,8 @@ std::string LowerAscii(std::string value) {
 
 bool IsRomExtension(const fs::path &path) {
   const std::string ext = LowerAscii(path.extension().u8string());
-  return ext == ".gba" || ext == ".zip" || ext == ".7z";
+  return ext == ".gba" || ext == ".agb" || ext == ".gbz" ||
+         ext == ".zip" || ext == ".7z";
 }
 
 std::string StableId(const std::string &text) {
@@ -348,6 +349,49 @@ PegasusScanReport ScanPegasusGbaRoots(const std::vector<std::string> &roots,
       if (!referenced.count(entry.path().filename().u8string())) ++report.unreferenced_roms;
     }
   }
+
+#ifdef PEGASUSG_BRICK
+  // Stock TrimUI folders normally contain plain ROM files instead of Pegasus
+  // metadata. Keep metadata authoritative for ROMs it references, then scan
+  // every configured root for remaining plain ROMs. This must be per-ROM
+  // rather than gated on metadata_files.empty(): the standard GBA collection
+  // can have metadata while the GBA hack and GBA vib collections do not.
+  for (const std::string &root_text : roots) {
+    const fs::path root = fs::u8path(root_text);
+    std::error_code error;
+    if (!fs::is_directory(root, error)) continue;
+    const CollectionKind root_kind = ClassifyCollection("", root);
+    fs::recursive_directory_iterator it(root, fs::directory_options::skip_permission_denied,
+                                        error);
+    const fs::recursive_directory_iterator end;
+    for (; !error && it != end; it.increment(error)) {
+      if (!it->is_regular_file(error) || !IsRomExtension(it->path())) continue;
+      std::error_code canonical_error;
+      const std::string canonical = fs::weakly_canonical(it->path(), canonical_error).u8string();
+      const std::string key = canonical_error ? it->path().u8string() : canonical;
+      if (!seen_roms.insert(key).second) continue;
+      GbaGame game;
+      game.id = StableId(key);
+      game.title = it->path().stem().u8string();
+      game.sort_key = game.title;
+      game.rom_path = it->path().u8string();
+      const fs::path category_images = fs::u8path("/mnt/SDCARD/Imgs") / root.filename();
+      game.cover_path = FindRegularFile(category_images, {
+          game.title + ".png", game.title + ".jpg", game.title + ".jpeg"});
+      if (game.cover_path.empty() && category_images.filename() != "GBA") {
+        game.cover_path = FindRegularFile("/mnt/SDCARD/Imgs/GBA", {
+            game.title + ".png", game.title + ".jpg", game.title + ".jpeg"});
+      }
+      game.is_rumble = root_kind == CollectionKind::Rumble || LooksLikeGbaRumble(game);
+      game.is_mod = !game.is_rumble &&
+          (root_kind == CollectionKind::Mod || overrides.count(game.title) != 0 ||
+           LooksLikeGbaMod(game));
+      game.default_core = game.is_rumble ? GbaCore::Gpsp : GbaCore::Mgba;
+      game.core = game.default_core;
+      report.games.push_back(std::move(game));
+    }
+  }
+#endif
 
   std::stable_sort(report.games.begin(), report.games.end(), [](const GbaGame &left,
                                                                  const GbaGame &right) {

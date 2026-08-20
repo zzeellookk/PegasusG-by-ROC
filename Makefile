@@ -54,6 +54,14 @@ build/pegasus_metadata_test.exe: tests/pegasus_metadata_test.cpp src/pegasus_met
 	@mkdir -p $(dir $@)
 	$(CXX) -Isrc $(CXXFLAGS) tests/pegasus_metadata_test.cpp src/pegasus_metadata.cpp -o $@
 
+build/brick_scan_test.exe: tests/brick_scan_test.cpp src/pegasus_metadata.cpp src/pegasus_metadata.h src/gba_model.h
+	@mkdir -p $(dir $@)
+	$(CXX) -Isrc -DPEGASUSG_BRICK $(CXXFLAGS) tests/brick_scan_test.cpp src/pegasus_metadata.cpp -o $@
+
+build/brick_services_test.exe: tests/brick_services_test.cpp src/h700_services.cpp src/h700_services.h
+	@mkdir -p $(dir $@)
+	$(CXX) -Isrc -DPEGASUSG_BRICK $(CXXFLAGS) tests/brick_services_test.cpp src/h700_services.cpp -o $@
+
 build/gba_ui_state_test.exe: tests/gba_ui_state_test.cpp src/gba_ui_state.cpp src/gba_ui_state.h
 	@mkdir -p $(dir $@)
 	$(CXX) -Isrc $(CXXFLAGS) tests/gba_ui_state_test.cpp src/gba_ui_state.cpp -o $@
@@ -76,11 +84,13 @@ build/video_preview_stop_test.exe: tests/video_preview_stop_test.cpp tests/fake_
 	chmod +x build/test-bin/ffmpeg
 	$(CXX) -Isrc $(CXXFLAGS) tests/video_preview_stop_test.cpp src/video_preview.cpp -o $@ $(shell $(PKG_CONFIG) --libs alsa 2>/dev/null)
 
-test: build/layout_test.exe build/catalog_test.exe build/online_sources_test.exe build/pegasus_metadata_test.exe build/gba_ui_state_test.exe build/gba_preferences_test.exe build/gba_state_test.exe build/optimized_image_path_test.exe build/video_preview_stop_test.exe
+test: build/layout_test.exe build/catalog_test.exe build/online_sources_test.exe build/pegasus_metadata_test.exe build/brick_scan_test.exe build/brick_services_test.exe build/gba_ui_state_test.exe build/gba_preferences_test.exe build/gba_state_test.exe build/optimized_image_path_test.exe build/video_preview_stop_test.exe
 	./build/layout_test.exe
 	./build/catalog_test.exe
 	./build/online_sources_test.exe
 	./build/pegasus_metadata_test.exe
+	./build/brick_scan_test.exe
+	./build/brick_services_test.exe
 	./build/gba_ui_state_test.exe
 	./build/gba_preferences_test.exe
 	./build/gba_state_test.exe
@@ -89,6 +99,7 @@ test: build/layout_test.exe build/catalog_test.exe build/online_sources_test.exe
 	sh tests/filter_mode_test.sh
 	sh tests/auto_cheats_test.sh
 	sh tests/autostart_test.sh
+	sh tests/brick_autostart_test.sh
 	sh tests/game_overrides_test.sh
 	sh tests/game_volume_test.sh
 	sh tests/recommended_controls_test.sh

@@ -1,0 +1,16 @@
+diff --git a/libretro/libretro.c b/libretro/libretro.c
+index 03ed282..0214f8a 100644
+--- a/libretro/libretro.c
++++ b/libretro/libretro.c
+@@ -1022,6 +1022,11 @@ static void check_variables(bool started_from_load)
+         else
+            rumble_mode = FEAT_AUTODETECT;
+      }
++#ifdef PEGASUSG_FORCE_RUMBLE
++     /* Brick's dedicated "GBA vib" launcher must also support homebrew and
++      * ROM hacks that are absent from gpSP's commercial-game database. */
++     rumble_mode = FEAT_ENABLE;
++#endif
+    }
+ 
+    var.key                = "gpsp_sprlim";

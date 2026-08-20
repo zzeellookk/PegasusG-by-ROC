@@ -1,11 +1,11 @@
 # PegasusG by ROC
 
 PegasusG by ROC is a downstream Linux SDL2 frontend for GBA-focused Pegasus
-content on H700 handhelds. It is a community port and adaptation project; it
+content on H700 and TrimUI Brick handhelds. It is a community port and adaptation project; it
 is **not** an official Pegasus Frontend release.
 
 The repository is intended to be cloned as a complete development project.
-Machine-specific code is kept under `H700/`, application code under `src/`,
+Machine-specific code is kept under `H700/` and `Brick/`, application code under `src/`,
 and portable tests under `tests/`.
 
 ## Attribution
@@ -28,6 +28,7 @@ src/                       Portable frontend implementation
 tests/                     Desktop and shell regression tests
 assets/                    Small runtime assets and 11 built-in music tracks
 H700/                      Cross-build, launcher, filter, input and packaging tools
+Brick/                     TrimUI Brick stable launcher, build and experiment archive
 docs/                      Architecture, baseline and migration documentation
 third_party/licenses/      Licenses copied for bundled core binaries
 ```
@@ -76,9 +77,26 @@ created with `-FullMusicSource`.
 ```
 
 The resulting archives are written to `H700/Downloads/`, which is ignored by
-Git except for formal versioned frontend packages and the directory README.
-Each formal package is also published through the matching GitHub Release.
+Git except for the directory README. Publish each tested package through the
+matching GitHub Release instead of committing the archive to the source tree.
 See `docs/PORTING_GUIDE.md` before adapting the launcher to another machine.
+
+## TrimUI Brick Port
+
+The current Brick stable baseline is `1.1.1-hotfix3-brick-stable-rollback`.
+It uses the firmware-provided AArch64 RetroArch cores and retains the verified
+MainUI autostart handoff (`killall -9 MainUI`). Build and staging instructions
+are in `Brick/README.md`.
+
+The later AArch64 gpSP, Chinese ZIP extraction and forced-rumble work is kept
+under `Brick/experimental/`. It is deliberately excluded from the stable
+launcher because the forced-rumble core still freezes on the first frame on
+the test device, and the combined hotfix was rolled back after an app startup
+regression. Keeping it separate preserves the investigation without making it
+the default release.
+
+For repository branches, commits and releases, see
+`docs/DEVELOPMENT_WORKFLOW.md` and `CHANGELOG.md`.
 
 ## Runtime Content
 

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -24,6 +25,25 @@ bool Flag(const char *name) {
   const std::string value = Env(name);
   return value == "1" || value == "true" || value == "yes";
 }
+
+#ifdef PEGASUSG_BRICK
+std::string BrickFfmpeg(const std::string &app_dir) {
+  std::vector<fs::path> candidates;
+  const std::string configured = Env("PEGASUSG_FFMPEG");
+  if (!configured.empty()) candidates.push_back(fs::u8path(configured));
+  candidates.push_back(fs::u8path(app_dir) / "ffmpeg");
+  candidates.push_back("/mnt/SDCARD/System/bin/ffmpeg");
+  candidates.push_back("/mnt/SDCARD/Apps/PortMaster/PortMaster/bin/ffmpeg");
+  candidates.push_back("/mnt/SDCARD/Apps/PortMaster/PortMaster/runtime/ffmpeg");
+  candidates.push_back("/usr/trimui/bin/ffmpeg");
+  candidates.push_back("/usr/bin/ffmpeg");
+  for (const fs::path &candidate : candidates) {
+    std::error_code error;
+    if (fs::is_regular_file(candidate, error)) return candidate.u8string();
+  }
+  return {};
+}
+#endif
 
 int Positive(const char *value, int fallback) {
   if (!value) return fallback;
@@ -58,11 +78,30 @@ int main(int argc, char **argv) {
   options.font_path = Env("PEGASUSG_FONT");
   options.diagnostics = Flag("PEGASUSG_DIAGNOSTICS");
   options.no_video = Flag("PEGASUSG_NO_VIDEO");
+#ifdef PEGASUSG_BRICK
+  options.diagnostics = true;
+  const std::string ffmpeg = BrickFfmpeg(options.app_dir);
+  if (!ffmpeg.empty()) {
+    const fs::path directory = fs::u8path(ffmpeg).parent_path();
+    const std::string old_path = Env("PATH", "/usr/bin:/bin");
+    const std::string path = directory.u8string() + ":" + old_path;
+    setenv("PATH", path.c_str(), 1);
+    options.no_video = false;
+    std::cerr << "[video] Brick ffmpeg=" << ffmpeg << '\n';
+  } else {
+    options.no_video = true;
+    std::cerr << "[video] Brick ffmpeg not found; video disabled\n";
+  }
+#endif
   std::string device = Env("PEGASUSG_DEVICE");
   std::transform(device.begin(), device.end(), device.begin(),
                  [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
   options.use_mini_assets = device == "h700";
+#ifdef PEGASUSG_BRICK
+  const std::string roots = Env("PEGASUSG_CONTENT_ROOTS", "/mnt/SDCARD/Roms/GBA");
+#else
   const std::string roots = Env("PEGASUSG_CONTENT_ROOTS", "/mnt/mmc/Roms/GBA:/mnt/sdcard/Roms/GBA");
+#endif
   options.content_roots = SplitLibraryRootList(roots);
 
   for (int i = 1; i < argc; ++i) {

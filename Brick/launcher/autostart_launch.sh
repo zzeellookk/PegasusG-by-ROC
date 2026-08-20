@@ -20,8 +20,8 @@ if [ "${PEGASUSG_DEVICE:-}" = "trimui_brick" ] || [ -d /mnt/SDCARD/System/starts
           chmod 755 "$request"
           mv "$request" "$command_path"
           printf 'PegasusG autostart\n' >"$host_message"
-          # Brick MainUI ignores SIGTERM. Its stock runtrimui.sh explicitly
-          # accepts exit code 137, so SIGKILL is the supported handoff here.
+          # Brick MainUI ignores SIGTERM. Its stock runtrimui.sh accepts
+          # exit code 137, so retain the already verified SIGKILL handoff.
           killall -9 MainUI 2>/dev/null || true
         fi
         exit 0

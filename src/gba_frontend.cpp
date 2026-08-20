@@ -54,16 +54,22 @@ constexpr int kCoverTitleMarqueeGap = 24;
 constexpr std::size_t kMaximumRecentGames = 100;
 constexpr int kVersionMenuVisibleRows = 6;
 constexpr int kSettingsCount = 15;
+constexpr int kCanvasWidth = 720;
+#ifdef PEGASUSG_BRICK
+constexpr int kCanvasHeight = 540;
+#else
+constexpr int kCanvasHeight = 480;
+#endif
 constexpr int kGridX = 240;
 constexpr int kGridY = 45;
 constexpr int kGridWidth = 480;
-constexpr int kGridHeight = 435;
+constexpr int kGridHeight = kCanvasHeight - kGridY;
 constexpr int kGridInset = 16;
 constexpr int kFullscreenGridInset = 18;
 constexpr int kCoverTitleBaseFontSize = 12;
 constexpr int kDescriptionBaseFontSize = 14;
 constexpr int kFontSizeLevelCount = 6;
-constexpr int kDescriptionTextHeight = 171;
+constexpr int kDescriptionTextHeight = kCanvasHeight - 309;
 constexpr const char *kTabs[kTabCount] = {
     "最近游戏", "GBA", "GBA改版", "GBA震动", "收藏",
 };
@@ -160,14 +166,11 @@ void Stroke(SDL_Renderer *renderer, const SDL_Rect &rect, SDL_Color color) {
 
 void FillRightSlantTab(SDL_Renderer *renderer, int x, int y, int width, int height,
                        int skew, SDL_Color color) {
-  const SDL_Vertex vertices[] = {
-      {{static_cast<float>(x), static_cast<float>(y)}, color, {0.0f, 0.0f}},
-      {{static_cast<float>(x + width + skew), static_cast<float>(y)}, color, {0.0f, 0.0f}},
-      {{static_cast<float>(x + width - skew), static_cast<float>(y + height)}, color, {0.0f, 0.0f}},
-      {{static_cast<float>(x), static_cast<float>(y + height)}, color, {0.0f, 0.0f}},
-  };
-  constexpr int indices[] = {0, 1, 2, 0, 2, 3};
-  SDL_RenderGeometry(renderer, nullptr, vertices, 4, indices, 6);
+  SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+  for (int row = 0; row < height; ++row) {
+    const int taper = height > 1 ? (2 * skew * row) / (height - 1) : 0;
+    SDL_RenderDrawLine(renderer, x, y + row, x + width + skew - taper, y + row);
+  }
 }
 
 float InOutQuad(float value) {
@@ -329,8 +332,12 @@ bool GbaFrontend::InitializeRuntime() {
     return false;
   }
   initialized_ = true;
-  const Uint32 flags = SDL_WINDOW_ALLOW_HIGHDPI |
-                       (options_.screenshot_path.empty() ? SDL_WINDOW_SHOWN : SDL_WINDOW_HIDDEN);
+  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+  Uint32 flags = SDL_WINDOW_ALLOW_HIGHDPI |
+                 (options_.screenshot_path.empty() ? SDL_WINDOW_SHOWN : SDL_WINDOW_HIDDEN);
+#ifdef PEGASUSG_BRICK
+  if (options_.screenshot_path.empty()) flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+#endif
   window_ = SDL_CreateWindow("PegasusG by ROC", SDL_WINDOWPOS_CENTERED,
                              SDL_WINDOWPOS_CENTERED, options_.width, options_.height, flags);
   if (!window_) {
@@ -345,7 +352,7 @@ bool GbaFrontend::InitializeRuntime() {
     return false;
   }
   SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-  SDL_RenderSetLogicalSize(renderer_, 720, 480);
+  SDL_RenderSetLogicalSize(renderer_, kCanvasWidth, kCanvasHeight);
 
   if (options_.font_path.empty()) {
     options_.font_path = FirstExisting({
@@ -697,7 +704,13 @@ int GbaFrontend::Run() {
 GbaFrontend::Action GbaFrontend::Translate(const SDL_Event &event) {
   if (event.type == SDL_KEYUP) {
     switch (event.key.keysym.sym) {
+#ifdef PEGASUSG_BRICK
+      case SDLK_F1: case SDLK_HOME: case SDLK_ESCAPE: return Action::MenuRelease;
+      case SDLK_RSHIFT: EndRepeat(Action::DescriptionUp); break;
+      case SDLK_RETURN: EndRepeat(Action::DescriptionDown); break;
+#else
       case SDLK_m: return Action::MenuRelease;
+#endif
       case SDLK_UP: EndRepeat(Action::Up); break;
       case SDLK_DOWN: EndRepeat(Action::Down); break;
       case SDLK_LEFT: EndRepeat(Action::Left); break;
@@ -714,6 +727,17 @@ GbaFrontend::Action GbaFrontend::Translate(const SDL_Event &event) {
       case SDLK_DOWN: BeginRepeat(Action::Down); return Action::Down;
       case SDLK_LEFT: BeginRepeat(Action::Left); return Action::Left;
       case SDLK_RIGHT: BeginRepeat(Action::Right); return Action::Right;
+#ifdef PEGASUSG_BRICK
+      case SDLK_x: return Action::Confirm;
+      case SDLK_z: case SDLK_BACKSPACE: return Action::Back;
+      case SDLK_s: return Action::Favorite;
+      case SDLK_a: return Action::CoreMenu;
+      case SDLK_q: return Action::TabPrevious;
+      case SDLK_w: return Action::TabNext;
+      case SDLK_RSHIFT: BeginRepeat(Action::DescriptionUp); return Action::DescriptionUp;
+      case SDLK_RETURN: BeginRepeat(Action::DescriptionDown); return Action::DescriptionDown;
+      case SDLK_F1: case SDLK_HOME: case SDLK_ESCAPE: return Action::MenuPress;
+#else
       case SDLK_RETURN: case SDLK_SPACE: return Action::Confirm;
       case SDLK_ESCAPE: case SDLK_BACKSPACE: return Action::Back;
       case SDLK_x: return Action::ToggleTitles;
@@ -725,6 +749,7 @@ GbaFrontend::Action GbaFrontend::Translate(const SDL_Event &event) {
       case SDLK_PAGEDOWN: BeginRepeat(Action::DescriptionDown); return Action::DescriptionDown;
       case SDLK_c: return Action::CoreMenu;
       case SDLK_m: return Action::MenuPress;
+#endif
       case SDLK_VOLUMEDOWN: return Action::VolumeDown;
       case SDLK_VOLUMEUP: return Action::VolumeUp;
       case SDLK_POWER: return Action::Power;
@@ -777,6 +802,17 @@ GbaFrontend::Action GbaFrontend::Translate(const SDL_Event &event) {
   }
   if (event.type == SDL_JOYBUTTONDOWN) {
     switch (event.jbutton.button) {
+#ifdef PEGASUSG_BRICK
+      case 1: return Action::Confirm;
+      case 0: return Action::Back;
+      case 3: return Action::Favorite;
+      case 2: return Action::CoreMenu;
+      case 4: return Action::TabPrevious;
+      case 5: return Action::TabNext;
+      case 6: BeginRepeat(Action::DescriptionUp); return Action::DescriptionUp;
+      case 7: BeginRepeat(Action::DescriptionDown); return Action::DescriptionDown;
+      case 8: return Action::MenuPress;
+#else
       case 0: return Action::Confirm;
       case 1: return Action::Back;
       case 2: return Action::ToggleTitles;
@@ -785,12 +821,19 @@ GbaFrontend::Action GbaFrontend::Translate(const SDL_Event &event) {
       case 5: return Action::TabNext;
       case 8: BeginRepeat(Action::DescriptionUp); return Action::DescriptionUp;
       case 9: BeginRepeat(Action::DescriptionDown); return Action::DescriptionDown;
+#endif
       default: break;
     }
   }
   if (event.type == SDL_JOYBUTTONUP) {
+#ifdef PEGASUSG_BRICK
+    if (event.jbutton.button == 6) EndRepeat(Action::DescriptionUp);
+    else if (event.jbutton.button == 7) EndRepeat(Action::DescriptionDown);
+    else if (event.jbutton.button == 8) return Action::MenuRelease;
+#else
     if (event.jbutton.button == 8) EndRepeat(Action::DescriptionUp);
     else if (event.jbutton.button == 9) EndRepeat(Action::DescriptionDown);
+#endif
   }
   if (event.type == SDL_JOYAXISMOTION || event.type == SDL_CONTROLLERAXISMOTION) {
     const int axis = event.type == SDL_JOYAXISMOTION ? event.jaxis.axis : event.caxis.axis;
@@ -861,19 +904,49 @@ void GbaFrontend::PollHeldActions() {
 
 void GbaFrontend::OpenEvdevInput() {
 #ifndef _WIN32
-  for (int index = 0; index < 8; ++index) {
+  constexpr std::size_t kBitsPerLong = sizeof(unsigned long) * 8;
+  const auto bit_is_set = [](const unsigned long *bits, int code) {
+    return (bits[static_cast<std::size_t>(code) / kBitsPerLong] &
+            (1UL << (static_cast<std::size_t>(code) % kBitsPerLong))) != 0;
+  };
+  for (int index = 0; index < 16; ++index) {
     const std::string path = "/dev/input/event" + std::to_string(index);
     const int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) continue;
     char name[128] = {};
     const bool named = ioctl(fd, EVIOCGNAME(sizeof(name)), name) >= 0;
+    unsigned long event_bits[(EV_MAX + kBitsPerLong) / kBitsPerLong] = {};
+    unsigned long key_bits[(KEY_MAX + kBitsPerLong) / kBitsPerLong] = {};
+    unsigned long abs_bits[(ABS_MAX + kBitsPerLong) / kBitsPerLong] = {};
+    ioctl(fd, EVIOCGBIT(0, sizeof(event_bits)), event_bits);
+    if (bit_is_set(event_bits, EV_KEY)) ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(key_bits)), key_bits);
+    if (bit_is_set(event_bits, EV_ABS)) ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(abs_bits)), abs_bits);
+#ifdef PEGASUSG_BRICK
+    const bool gamepad_source =
+        bit_is_set(key_bits, BTN_SOUTH) || bit_is_set(key_bits, BTN_EAST) ||
+        bit_is_set(key_bits, BTN_C) || bit_is_set(key_bits, BTN_NORTH) ||
+        bit_is_set(key_bits, BTN_0) || bit_is_set(key_bits, BTN_1) ||
+        bit_is_set(abs_bits, ABS_HAT0X) || bit_is_set(abs_bits, ABS_HAT0Y);
+    const bool keyboard_source =
+        bit_is_set(key_bits, KEY_X) || bit_is_set(key_bits, KEY_Z) ||
+        bit_is_set(key_bits, KEY_F1) || bit_is_set(key_bits, KEY_ENTER) ||
+        bit_is_set(key_bits, KEY_VOLUMEUP) || bit_is_set(key_bits, KEY_VOLUMEDOWN);
+    const bool input_source = gamepad_source || keyboard_source;
+#else
+    const bool gamepad_source = named && std::string(name) == "ANBERNIC-keys";
     const bool input_source = named &&
-        (std::string(name) == "dierct-keys-polled" || std::string(name) == "ANBERNIC-keys");
+        (std::string(name) == "dierct-keys-polled" || gamepad_source);
+#endif
+    if (options_.diagnostics) {
+      std::cerr << "[input] probe " << path << " name=" << (named ? name : "?")
+                << " accepted=" << (input_source ? "yes" : "no")
+                << " gamepad=" << (gamepad_source ? "yes" : "no") << '\n';
+    }
     if (!input_source) {
       close(fd);
       continue;
     }
-    if (std::string(name) == "ANBERNIC-keys") has_evdev_gamepad_ = true;
+    if (gamepad_source) has_evdev_gamepad_ = true;
     evdev_input_fds_.push_back(fd);
     if (options_.diagnostics) {
       std::cerr << "[gba] evdev input=" << path << " (" << name << ")\n";
@@ -891,6 +964,26 @@ void GbaFrontend::PollEvdevInput() {
       if (event.type == EV_KEY) {
         if (event.value == 1) {
           switch (event.code) {
+#ifdef PEGASUSG_BRICK
+            case BTN_EAST: case BTN_1: case KEY_X: action = Action::Confirm; break;
+            case BTN_SOUTH: case BTN_0: case KEY_Z: case KEY_BACKSPACE:
+              action = Action::Back; break;
+            case BTN_NORTH: case BTN_3: case KEY_S: action = Action::Favorite; break;
+            case BTN_C: case BTN_WEST: case BTN_2: case KEY_A:
+              action = Action::CoreMenu; break;
+            case BTN_TL: case BTN_4: case KEY_Q: action = Action::TabPrevious; break;
+            case BTN_TR: case BTN_5: case KEY_W: action = Action::TabNext; break;
+            case BTN_SELECT: case BTN_6: case KEY_RIGHTSHIFT:
+              action = Action::DescriptionUp; BeginRepeat(action); break;
+            case BTN_START: case BTN_7: case KEY_ENTER:
+              action = Action::DescriptionDown; BeginRepeat(action); break;
+            case BTN_MODE: case BTN_8: case KEY_F1: case KEY_HOME: case KEY_ESC:
+              action = Action::MenuPress; break;
+            case KEY_UP: action = Action::Up; BeginRepeat(action); break;
+            case KEY_DOWN: action = Action::Down; BeginRepeat(action); break;
+            case KEY_LEFT: action = Action::Left; BeginRepeat(action); break;
+            case KEY_RIGHT: action = Action::Right; BeginRepeat(action); break;
+#else
             case BTN_SOUTH: action = Action::Confirm; break;
             case BTN_EAST: action = Action::Back; break;
             case BTN_NORTH: action = Action::ToggleTitles; break;
@@ -913,6 +1006,8 @@ void GbaFrontend::PollEvdevInput() {
               break;
             case BTN_TL: action = Action::Favorite; break;
             case BTN_TR: action = Action::CoreMenu; break;
+#endif
+#ifndef PEGASUSG_BRICK
             case BTN_SELECT:
               action = Action::DescriptionUp;
               BeginRepeat(action);
@@ -921,13 +1016,30 @@ void GbaFrontend::PollEvdevInput() {
               action = Action::DescriptionDown;
               BeginRepeat(action);
               break;
+#endif
             case KEY_VOLUMEDOWN: action = Action::VolumeDown; break;
             case KEY_VOLUMEUP: action = Action::VolumeUp; break;
             default: break;
           }
         } else if (event.value == 0) {
+#ifdef PEGASUSG_BRICK
+          if (event.code == BTN_SELECT || event.code == BTN_6 ||
+              event.code == KEY_RIGHTSHIFT)
+            EndRepeat(Action::DescriptionUp);
+          else if (event.code == BTN_START || event.code == BTN_7 ||
+                   event.code == KEY_ENTER)
+            EndRepeat(Action::DescriptionDown);
+          else if (event.code == BTN_MODE || event.code == BTN_8 || event.code == KEY_F1 ||
+                   event.code == KEY_HOME || event.code == KEY_ESC)
+            action = Action::MenuRelease;
+          else if (event.code == KEY_UP) EndRepeat(Action::Up);
+          else if (event.code == KEY_DOWN) EndRepeat(Action::Down);
+          else if (event.code == KEY_LEFT) EndRepeat(Action::Left);
+          else if (event.code == KEY_RIGHT) EndRepeat(Action::Right);
+#else
           if (event.code == BTN_SELECT) EndRepeat(Action::DescriptionUp);
           else if (event.code == BTN_START) EndRepeat(Action::DescriptionDown);
+#endif
         }
       } else if (event.type == EV_ABS) {
         if (event.code == ABS_HAT0X) {
@@ -1012,10 +1124,17 @@ void GbaFrontend::Handle(Action action) {
     return;
   }
   if (action == Action::Power) {
+#ifdef PEGASUSG_BRICK
+    // Brick's stock power service observes the physical key independently.
+    // Do not translate it into the H700 suspend exit code, which terminates
+    // the app and returns to MainUI.
+    return;
+#else
     video_.Stop();
     exit_code_ = kExitSuspendManual;
     running_ = false;
     return;
+#endif
   }
   if (action == Action::VolumeDown || action == Action::VolumeUp) {
     const Uint32 now = SDL_GetTicks();
@@ -1396,13 +1515,13 @@ int GbaFrontend::GridColumns() const {
 }
 
 int GbaFrontend::GridCardSize() const {
-  const int width = preferences_.fullscreen_grid ? 720 : kGridWidth;
+  const int width = preferences_.fullscreen_grid ? kCanvasWidth : kGridWidth;
   const int inset = preferences_.fullscreen_grid ? kFullscreenGridInset : kGridInset;
   return (width - inset * 2) / GridColumns();
 }
 
 int GbaFrontend::GridVisibleRows() const {
-  const int height = preferences_.fullscreen_grid ? 480 : kGridHeight;
+  const int height = preferences_.fullscreen_grid ? kCanvasHeight : kGridHeight;
   const int inset = preferences_.fullscreen_grid ? kFullscreenGridInset : kGridInset;
   return std::max(1, (height - inset * 2) / GridCardSize());
 }
@@ -1697,7 +1816,7 @@ void GbaFrontend::UpdateVideoTexture() {
 }
 
 void GbaFrontend::Render() {
-  Fill(renderer_, SDL_Rect{0, 0, 720, 480}, kBackground);
+  Fill(renderer_, SDL_Rect{0, 0, kCanvasWidth, kCanvasHeight}, kBackground);
   if (settings_open_) {
     RenderSettings();
     return;
@@ -1716,7 +1835,7 @@ void GbaFrontend::Render() {
 }
 
 void GbaFrontend::RenderTopBar(int y_offset) {
-  SDL_Rect viewport{0, y_offset, 720, 480};
+  SDL_Rect viewport{0, y_offset, kCanvasWidth, kCanvasHeight};
   SDL_RenderSetViewport(renderer_, &viewport);
   const ThemeColors theme = ColorsForTheme(preferences_.theme_color);
   Fill(renderer_, SDL_Rect{0, 0, 720, 45}, theme.bar);
@@ -1841,16 +1960,12 @@ void GbaFrontend::RenderTopBar(int y_offset) {
     }
     if (status_.charging) {
       constexpr SDL_Color kBolt{255, 255, 255, 255};
-      const SDL_Vertex bolt[] = {
-          {{704.0f, 26.0f}, kBolt, {0.0f, 0.0f}},
-          {{700.0f, 31.0f}, kBolt, {0.0f, 0.0f}},
-          {{703.0f, 31.0f}, kBolt, {0.0f, 0.0f}},
-          {{702.0f, 34.0f}, kBolt, {0.0f, 0.0f}},
-          {{708.0f, 29.0f}, kBolt, {0.0f, 0.0f}},
-          {{705.0f, 29.0f}, kBolt, {0.0f, 0.0f}},
+      const SDL_Point bolt[] = {
+          {704, 26}, {700, 31}, {703, 31}, {702, 34},
+          {708, 29}, {705, 29}, {704, 26},
       };
-      constexpr int bolt_indices[] = {0, 1, 2, 0, 2, 5, 5, 2, 3, 5, 3, 4};
-      SDL_RenderGeometry(renderer_, nullptr, bolt, 6, bolt_indices, 12);
+      SDL_SetRenderDrawColor(renderer_, kBolt.r, kBolt.g, kBolt.b, kBolt.a);
+      SDL_RenderDrawLines(renderer_, bolt, static_cast<int>(sizeof(bolt) / sizeof(bolt[0])));
     }
   }
   const std::string battery_text = status_.battery_percent >= 0
@@ -1860,12 +1975,12 @@ void GbaFrontend::RenderTopBar(int y_offset) {
 }
 
 void GbaFrontend::RenderGameInfo(int x_offset) {
-  SDL_Rect viewport{x_offset, 0, 720, 480};
+  SDL_Rect viewport{x_offset, 0, kCanvasWidth, kCanvasHeight};
   SDL_RenderSetViewport(renderer_, &viewport);
   const GbaGame *game = SelectedGame();
-  Fill(renderer_, SDL_Rect{0, 45, 240, 435}, kBackground);
+  Fill(renderer_, SDL_Rect{0, kGridY, kGridX, kGridHeight}, kBackground);
   SDL_SetRenderDrawColor(renderer_, 50, 52, 55, 255);
-  SDL_RenderDrawLine(renderer_, 239, 45, 239, 479);
+  SDL_RenderDrawLine(renderer_, kGridX - 1, kGridY, kGridX - 1, kCanvasHeight - 1);
 
   if (!game) {
     DrawText("此分类暂无游戏", 120, 214, 18, kMuted, 208, true);
@@ -1887,7 +2002,7 @@ void GbaFrontend::RenderGameInfo(int x_offset) {
   }
   Stroke(renderer_, video_bounds, SDL_Color{58, 61, 65, 255});
   if (!game->developer.empty()) DrawText(game->developer, 13, 278, 12, kMuted, 214);
-  const SDL_Rect details_bounds{7, 294, 226, 181};
+  const SDL_Rect details_bounds{7, 294, 226, kCanvasHeight - 299};
   if (description_highlighted_) {
     Fill(renderer_, details_bounds, SDL_Color{18, 20, 23, 255});
     Stroke(renderer_, details_bounds, SDL_Color{255, 255, 255, 220});
@@ -1904,9 +2019,9 @@ void GbaFrontend::RenderGrid(float chrome_hidden_progress) {
   const int grid_x = static_cast<int>(std::lround(kGridX * (1.0f - progress)));
   const int grid_y = static_cast<int>(std::lround(kGridY * (1.0f - progress)));
   const int grid_width = static_cast<int>(std::lround(
-      kGridWidth + (720 - kGridWidth) * progress));
+      kGridWidth + (kCanvasWidth - kGridWidth) * progress));
   const int grid_height = static_cast<int>(std::lround(
-      kGridHeight + (480 - kGridHeight) * progress));
+      kGridHeight + (kCanvasHeight - kGridHeight) * progress));
   const int grid_inset = static_cast<int>(std::lround(
       kGridInset + (kFullscreenGridInset - kGridInset) * progress));
   const int card_size = std::max(1, (grid_width - grid_inset * 2) / columns);
@@ -2005,7 +2120,8 @@ void GbaFrontend::RenderGrid(float chrome_hidden_progress) {
 }
 
 void GbaFrontend::RenderSettings() {
-  Fill(renderer_, SDL_Rect{0, 0, 720, 480}, SDL_Color{11, 12, 14, 255});
+  Fill(renderer_, SDL_Rect{0, 0, kCanvasWidth, kCanvasHeight},
+       SDL_Color{11, 12, 14, 255});
   constexpr int kTitleY = 25;
   constexpr int kTitleSize = 28;
   constexpr int kBrandSize = 13;
@@ -2102,11 +2218,12 @@ void GbaFrontend::RenderSettings() {
 }
 
 void GbaFrontend::RenderCoreMenu() {
-  Fill(renderer_, SDL_Rect{0, 0, 720, 480}, SDL_Color{0, 0, 0, 96});
-  const SDL_Rect dialog{224, 102, 272, 276};
+  Fill(renderer_, SDL_Rect{0, 0, kCanvasWidth, kCanvasHeight},
+       SDL_Color{0, 0, 0, 96});
+  const SDL_Rect dialog{224, (kCanvasHeight - 276) / 2, 272, 276};
   Fill(renderer_, dialog, SDL_Color{17, 18, 20, 248});
   Stroke(renderer_, dialog, SDL_Color{112, 116, 122, 255});
-  DrawText("选择游戏核心", 360, 121, 20, kInk, 240, true);
+  DrawText("选择游戏核心", 360, dialog.y + 19, 20, kInk, 240, true);
 
   const GbaGame *game = SelectedGame();
   const char *options[] = {
@@ -2116,7 +2233,7 @@ void GbaFrontend::RenderCoreMenu() {
       "VBA Next 核心",
   };
   for (int index = 0; index < 4; ++index) {
-    const SDL_Rect row{244, 159 + index * 48, 232, 40};
+    const SDL_Rect row{244, dialog.y + 57 + index * 48, 232, 40};
     if (index == core_menu_selected_) {
       Fill(renderer_, row, SDL_Color{48, 51, 56, 255});
       Fill(renderer_, SDL_Rect{row.x, row.y, 4, row.h}, kAccent);
@@ -2129,10 +2246,11 @@ void GbaFrontend::RenderCoreMenu() {
 void GbaFrontend::RenderVersionMenu() {
   const std::vector<std::string> roms = SelectedRomOptions();
   if (roms.empty()) return;
-  Fill(renderer_, SDL_Rect{0, 0, 720, 480}, SDL_Color{0, 0, 0, 112});
+  Fill(renderer_, SDL_Rect{0, 0, kCanvasWidth, kCanvasHeight},
+       SDL_Color{0, 0, 0, 112});
   const int visible_rows = std::min(kVersionMenuVisibleRows, static_cast<int>(roms.size()));
   const int dialog_height = 78 + visible_rows * 45;
-  const SDL_Rect dialog{120, (480 - dialog_height) / 2, 480, dialog_height};
+  const SDL_Rect dialog{120, (kCanvasHeight - dialog_height) / 2, 480, dialog_height};
   Fill(renderer_, dialog, SDL_Color{17, 18, 20, 250});
   Stroke(renderer_, dialog, SDL_Color{112, 116, 122, 255});
   DrawText("选择游戏版本", 360, dialog.y + 17, 20, kInk, 440, true);
@@ -2158,10 +2276,10 @@ void GbaFrontend::RenderOsd() {
     osd_until_ = 0;
     return;
   }
-  const SDL_Rect box{245, 214, 230, 52};
+  const SDL_Rect box{245, (kCanvasHeight - 52) / 2, 230, 52};
   Fill(renderer_, box, SDL_Color{18,20,23,235});
   Stroke(renderer_, box, SDL_Color{93,98,106,255});
-  DrawText(osd_text_, 360, 230, 18, SDL_Color{255,255,255,255}, 210, true);
+  DrawText(osd_text_, 360, box.y + 16, 18, SDL_Color{255,255,255,255}, 210, true);
 }
 
 void GbaFrontend::DrawText(const std::string &text, int x, int y, int size, SDL_Color color,
@@ -2394,7 +2512,6 @@ SDL_Texture *GbaFrontend::Image(const std::string &path) {
   if (!texture) return nullptr;
   if (resolved.optimized) ++thumbnail_image_loads_;
   else ++original_image_loads_;
-  SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
   if (images_.size() >= kImageCacheCapacity) {
     const std::string &oldest = image_lru_.back();
     const auto old = images_.find(oldest);
@@ -2456,7 +2573,8 @@ bool GbaFrontend::WriteLaunchRequest(const GbaGame &game, const std::string &rom
 }
 
 bool GbaFrontend::SaveScreenshot(const std::string &path) {
-  SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, 720, 480, 32, SDL_PIXELFORMAT_ARGB8888);
+  SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(
+      0, kCanvasWidth, kCanvasHeight, 32, SDL_PIXELFORMAT_ARGB8888);
   if (!surface) return false;
   const bool okay = SDL_RenderReadPixels(renderer_, nullptr, SDL_PIXELFORMAT_ARGB8888,
                                          surface->pixels, surface->pitch) == 0 &&

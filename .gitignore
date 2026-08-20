@@ -1,4 +1,8 @@
 /build/
+/Brick/build/
+/Brick/dist/
+/Brick/sysroot/
+/Brick/sysroot_*/
 /screenshots/
 /assets/dev/
 /H700/sysroot/
@@ -10,6 +14,12 @@
 /H700/dist_app/
 /H700/Downloads/*
 !/H700/Downloads/README.md
-!/H700/Downloads/PegasusG by ROC ver* for H700.zip
 /.vs/
 /.idea/
+*.o
+cc*.s
+*.log
+*.gba
+*.agb
+*.sav
+*.srm

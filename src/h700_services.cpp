@@ -1,6 +1,7 @@
 #include "h700_services.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -36,6 +37,11 @@ bool ApplyPanelBrightness(int level) {
   (void)level;
   return true;
 #else
+#ifdef PEGASUSG_BRICK
+  std::ofstream output("/tmp/system/set_brightness");
+  output << std::clamp(level, 0, 10);
+  return static_cast<bool>(output);
+#else
   constexpr unsigned long kPanelBrightness[10] = {
       5, 10, 20, 35, 50, 70, 100, 140, 200, 255,
   };
@@ -47,12 +53,18 @@ bool ApplyPanelBrightness(int level) {
   close(display);
   return applied;
 #endif
+#endif
 }
 
 bool ApplyVolumeLevel(int level) {
 #ifdef _WIN32
   (void)level;
   return true;
+#else
+#ifdef PEGASUSG_BRICK
+  std::ofstream output("/tmp/system/set_volume");
+  output << std::clamp(level, 0, 20);
+  return static_cast<bool>(output);
 #else
   const int clamped = std::clamp(level, 0, 9);
   const int mixer_value = clamped == 0 ? 0 : 1 + ((clamped - 1) * 30 + 4) / 8;
@@ -61,6 +73,25 @@ bool ApplyVolumeLevel(int level) {
   if (clamped == 0) command << " && amixer -q -c 0 set SPK off";
   else command << " && amixer -q -c 0 set SPK on";
   return std::system(command.str().c_str()) == 0;
+#endif
+#endif
+}
+
+int ReadTrimuiValue(const char *name, int fallback) {
+#ifdef PEGASUSG_BRICK
+  const std::string command = std::string("shmvar ") + name + " 2>/dev/null";
+  FILE *pipe = popen(command.c_str(), "r");
+  if (!pipe) return fallback;
+  char buffer[32] = {};
+  const bool read = std::fgets(buffer, sizeof(buffer), pipe) != nullptr;
+  pclose(pipe);
+  if (!read) return fallback;
+  char *end = nullptr;
+  const long value = std::strtol(buffer, &end, 10);
+  return end != buffer ? static_cast<int>(value) : fallback;
+#else
+  (void)name;
+  return fallback;
 #endif
 }
 
@@ -83,7 +114,15 @@ bool H700Services::WriteInt(const std::string &path, int value) const {
 
 bool H700Services::AutostartEnabled() const {
   std::error_code error;
+#ifdef PEGASUSG_BRICK
+  const char *override_path = std::getenv("PEGASUSG_BRICK_AUTOSTART_HOOK");
+  const fs::path hook = override_path && *override_path
+      ? fs::u8path(override_path)
+      : fs::u8path("/mnt/SDCARD/System/starts/zz_pegasusg_autostart.sh");
+  return fs::is_regular_file(hook, error);
+#else
   return fs::is_regular_file(fs::u8path(state_dir_) / "autostart.enabled", error);
+#endif
 }
 
 H700Status H700Services::ReadStatus() const {
@@ -91,6 +130,12 @@ H700Status H700Services::ReadStatus() const {
   status.battery_percent = ReadInt(std::string(kBatteryRoot) + "/capacity", -1);
   const std::string battery_status = ReadText(std::string(kBatteryRoot) + "/status");
   status.charging = battery_status == "Charging" || battery_status == "Full";
+#ifdef PEGASUSG_BRICK
+  status.brightness = ReadTrimuiValue("brightness", 5);
+  status.volume = ReadTrimuiValue("vol", 10);
+  status.autostart = AutostartEnabled();
+  return status;
+#else
   const fs::path brightness_state = fs::u8path(state_dir_) / "brightness.level";
   status.brightness = ReadInt(brightness_state.u8string(),
                               ReadInt(std::string(kBatteryRoot) + "/brightness", -1));
@@ -98,9 +143,15 @@ H700Status H700Services::ReadStatus() const {
   status.volume = lineout;
   status.autostart = AutostartEnabled();
   return status;
+#endif
 }
 
 int H700Services::ChangeBrightness(int delta) const {
+#ifdef PEGASUSG_BRICK
+  const int current = ReadTrimuiValue("brightness", 5);
+  const int next = std::clamp(current + delta, 0, 10);
+  return ApplyPanelBrightness(next) ? next : current;
+#else
   const std::string system_path = std::string(kBatteryRoot) + "/brightness";
   const fs::path state_path = fs::u8path(state_dir_) / "brightness.level";
   const int current = ReadInt(state_path.u8string(), ReadInt(system_path, 8));
@@ -112,9 +163,13 @@ int H700Services::ChangeBrightness(int delta) const {
   fs::create_directories(state_path.parent_path(), error);
   WriteInt(system_path, next);
   return WriteInt(state_path.u8string(), next) ? next : current;
+#endif
 }
 
 bool H700Services::RestoreBrightness() const {
+#ifdef PEGASUSG_BRICK
+  return true;
+#else
   const std::string system_path = std::string(kBatteryRoot) + "/brightness";
   const fs::path state_path = fs::u8path(state_dir_) / "brightness.level";
   const int current = ReadInt(state_path.u8string(), 8);
@@ -123,9 +178,15 @@ bool H700Services::RestoreBrightness() const {
   fs::create_directories(state_path.parent_path(), error);
   WriteInt(system_path, current);
   return WriteInt(state_path.u8string(), current);
+#endif
 }
 
 int H700Services::ChangeVolume(int delta) const {
+#ifdef PEGASUSG_BRICK
+  const int current = ReadTrimuiValue("vol", 10);
+  const int next = std::clamp(current + delta, 0, 20);
+  return ApplyVolumeLevel(next) ? next : current;
+#else
   const fs::path state_path = fs::u8path(state_dir_) / "volume.level";
   int current = ReadInt(state_path.u8string(), 6);
   const int next = std::clamp(current + delta, 0, 9);
@@ -135,15 +196,20 @@ int H700Services::ChangeVolume(int delta) const {
   if (!ApplyVolumeLevel(next)) return current;
   WriteInt(state_path.u8string(), next);
   return next;
+#endif
 }
 
 bool H700Services::RestoreVolume() const {
+#ifdef PEGASUSG_BRICK
+  return true;
+#else
   const fs::path state_path = fs::u8path(state_dir_) / "volume.level";
   const int current = ReadInt(state_path.u8string(), 6);
   if (!ApplyVolumeLevel(current)) return false;
   std::error_code error;
   fs::create_directories(state_path.parent_path(), error);
   return WriteInt(state_path.u8string(), current);
+#endif
 }
 
 int H700Services::HallState() const {
