@@ -47,10 +47,17 @@ or committed sysroot is required. This produces a low-glibc AArch64 CI package,
 but it does not replace testing against the target firmware: verify the ZIP on
 the Brick before promoting it to a stable release.
 
-Successful runs publish `PegasusG-Brick-<version>.zip` and its `.sha256` file
-as a workflow artifact retained for 30 days. Download the artifact from the
-completed Actions run; only promote it to a GitHub Release after completing the
-device checklist in `STABLE_BASELINE.md`.
+Successful runs publish two workflow artifacts retained for 30 days:
+
+- `PegasusG-Brick-<version>-Full`: a clean-install package with the application
+  entry, stable launchers, UI assets, 11 built-in tracks, configuration and
+  notices. It deliberately excludes FFmpeg, experimental cores and an enabled
+  autostart hook.
+- `PegasusG-Brick-<version>-Update`: only the frontend binary, stable launchers
+  and version file, for updating an existing complete installation.
+
+Only promote a package to a GitHub Release after completing the device
+checklist in `STABLE_BASELINE.md`.
 
 ## Experimental work
 

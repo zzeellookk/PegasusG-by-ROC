@@ -1,0 +1,8 @@
+{
+  "label": "PegasusG by ROC",
+  "label.ch.lang": "天马G by ROC",
+  "icontop": "icon.png",
+  "launch": "launch.sh",
+  "description": "PegasusG by ROC - TrimUI Brick port",
+  "description.ch.lang": "天马G ROC移植 - TrimUI Brick 1.1.1 适配版"
+}

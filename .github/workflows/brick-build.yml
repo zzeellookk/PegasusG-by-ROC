@@ -7,6 +7,12 @@ on:
       - ".github/workflows/brick-build.yml"
       - "Brick/**"
       - "src/**"
+      - "assets/music/builtin/**"
+      - "assets/ui/**"
+      - "LICENSE.md"
+      - "NOTICE.md"
+      - "NOTICE.zh-CN.md"
+      - "THIRD_PARTY_NOTICES.md"
   workflow_dispatch:
     inputs:
       version:
@@ -66,32 +72,57 @@ jobs:
           CROSS_CXX=aarch64-linux-gnu-g++ \
             ./Brick/build_app.sh
 
-          archive="Brick/dist/PegasusG-Brick-${version}.zip"
-          test -f "$archive"
-          sha256sum "$archive" > "${archive}.sha256"
-          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          full_archive="Brick/dist/PegasusG-Brick-${version}-Full.zip"
+          update_archive="Brick/dist/PegasusG-Brick-${version}-Update.zip"
+          test -f "$full_archive"
+          test -f "$update_archive"
+          sha256sum "$full_archive" > "${full_archive}.sha256"
+          sha256sum "$update_archive" > "${update_archive}.sha256"
+          echo "full_archive=$full_archive" >> "$GITHUB_OUTPUT"
+          echo "update_archive=$update_archive" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Validate package architecture and contents
         shell: bash
         run: |
           set -euo pipefail
-          archive="${{ steps.build.outputs.archive }}"
-          unpacked="$RUNNER_TEMP/brick-package"
-          unzip -q "$archive" -d "$unpacked"
-          binary="$unpacked/Apps/PegasusG/pegasusg_by_roc"
+          full_archive="${{ steps.build.outputs.full_archive }}"
+          update_archive="${{ steps.build.outputs.update_archive }}"
+          full="$RUNNER_TEMP/brick-full"
+          update="$RUNNER_TEMP/brick-update"
+          unzip -q "$full_archive" -d "$full"
+          unzip -q "$update_archive" -d "$update"
+          binary="$full/Apps/PegasusG/pegasusg_by_roc"
           test -x "$binary"
           aarch64-linux-gnu-readelf -h "$binary" | grep -q 'Machine:.*AArch64'
-          test -x "$unpacked/Apps/PegasusG/launch.sh"
-          test -s "$unpacked/Apps/PegasusG/version.txt"
-          unzip -l "$archive"
+          test -x "$full/Apps/PegasusG/launch.sh"
+          test -s "$full/Apps/PegasusG/config.json"
+          test -s "$full/Apps/PegasusG/icon.png"
+          test -s "$full/Apps/PegasusG/assets/ui/pegasus_g.png"
+          test "$(find "$full/Apps/PegasusG/assets/music" -maxdepth 1 -type f -name '*.mp3' | wc -l)" -eq 11
+          test -x "$update/Apps/PegasusG/pegasusg_by_roc"
+          test ! -e "$full/Apps/PegasusG/ffmpeg"
+          test ! -e "$full/Apps/PegasusG/cores"
+          test ! -e "$full/System/starts/zz_pegasusg_autostart.sh"
+          unzip -l "$full_archive"
+          unzip -l "$update_archive"
 
-      - name: Upload install package
+      - name: Upload full install package
         uses: actions/upload-artifact@v4
         with:
-          name: PegasusG-Brick-${{ steps.build.outputs.version }}
+          name: PegasusG-Brick-${{ steps.build.outputs.version }}-Full
           path: |
-            ${{ steps.build.outputs.archive }}
-            ${{ steps.build.outputs.archive }}.sha256
+            ${{ steps.build.outputs.full_archive }}
+            ${{ steps.build.outputs.full_archive }}.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload update package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PegasusG-Brick-${{ steps.build.outputs.version }}-Update
+          path: |
+            ${{ steps.build.outputs.update_archive }}
+            ${{ steps.build.outputs.update_archive }}.sha256
           if-no-files-found: error
           retention-days: 30
