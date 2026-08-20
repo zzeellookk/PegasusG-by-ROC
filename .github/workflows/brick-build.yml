@@ -24,54 +24,24 @@ concurrency:
 jobs:
   package:
     name: Build AArch64 package
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container: debian:bullseye-slim
     timeout-minutes: 30
-    env:
-      BRICK_SYSROOT_URL: ${{ secrets.BRICK_SYSROOT_URL }}
-      BRICK_SYSROOT_SHA256: ${{ secrets.BRICK_SYSROOT_SHA256 }}
 
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
       - name: Install cross-build tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y g++-aarch64-linux-gnu pkg-config python3 unzip zstd
+          dpkg --add-architecture arm64
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates git \
+            g++-aarch64-linux-gnu pkg-config python3 unzip \
+            libsdl2-dev:arm64 libsdl2-image-dev:arm64 \
+            libsdl2-ttf-dev:arm64 libasound2-dev:arm64
+          rm -rf /var/lib/apt/lists/*
 
-      - name: Download and verify Brick sysroot
-        id: sysroot
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "$BRICK_SYSROOT_URL" ]; then
-            echo "::error::Missing repository secret BRICK_SYSROOT_URL"
-            exit 1
-          fi
-
-          archive="$RUNNER_TEMP/brick-sysroot.archive"
-          extract_root="$RUNNER_TEMP/brick-sysroot"
-          mkdir -p "$extract_root"
-          curl --fail --location --retry 3 --retry-all-errors \
-            --output "$archive" "$BRICK_SYSROOT_URL"
-
-          if [ -n "$BRICK_SYSROOT_SHA256" ]; then
-            printf '%s  %s\n' "$BRICK_SYSROOT_SHA256" "$archive" | sha256sum --check --strict
-          fi
-
-          tar -xf "$archive" -C "$extract_root"
-          sysroot="$extract_root"
-          if [ ! -d "$sysroot/usr/include" ]; then
-            mapfile -t candidates < <(find "$extract_root" -mindepth 1 -maxdepth 3 \
-              -type d -path '*/usr/include' -printf '%h\n')
-            if [ "${#candidates[@]}" -ne 1 ]; then
-              echo "::error::The sysroot archive must contain usr/include at its root or under one top-level directory"
-              exit 1
-            fi
-            sysroot="${candidates[0]%/usr}"
-          fi
-
-          echo "path=$sysroot" >> "$GITHUB_OUTPUT"
+      - name: Check out source
+        uses: actions/checkout@v4
 
       - name: Build Brick install ZIP
         id: build
@@ -92,7 +62,8 @@ jobs:
           chmod +x Brick/build_app.sh
           PEGASUSG_VERSION="$version" \
           PEGASUSG_OUTPUT=Zip \
-          PEGASUSG_SYSROOT="${{ steps.sysroot.outputs.path }}" \
+          PEGASUSG_SYSROOT=/ \
+          CROSS_CXX=aarch64-linux-gnu-g++ \
             ./Brick/build_app.sh
 
           archive="Brick/dist/PegasusG-Brick-${version}.zip"
