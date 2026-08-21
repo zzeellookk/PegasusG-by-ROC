@@ -10,6 +10,8 @@ CORE_DIR="$APP_DIR/cores"
 GBA_DIR="/mnt/SDCARD/Emus/GBA"
 RUMBLE_CORE_OPTIONS="$STATE_DIR/gpsp-rumble-options.cfg"
 RUMBLE_RA_APPEND="$STATE_DIR/gpsp-rumble-append.cfg"
+ZIP_EXTRACTOR="$APP_DIR/extract_gba_zip.sh"
+RA_TEMP_ROM_DIR="/tmp/pegasusg-ra/GBA"
 
 mkdir -p "$STATE_DIR"
 cd "$APP_DIR" || exit 1
@@ -98,9 +100,42 @@ launch_game() {
   selected_core="$(core_path "$core")"
   printf '[launcher] choice=%s core=%s rom=%s\n' "$core" "$selected_core" "$rom" >> "$LOG_FILE"
 
-  # 不在天马中解压 ROM；.gba、.zip 等路径原样交给 RetroArch。
-  launch_ra64 "$rom" "$selected_core" "$core"
+  # Match the H700 launcher for path-based gpSP cores: stream the sole GBA
+  # member to a temporary plain ROM before starting RetroArch. Keep the file
+  # in /tmp so Brick does not repeatedly write the SD card. Other cores still
+  # receive the original archive path unchanged.
+  launch_rom="$rom"
+  temp_rom=""
+  rom_lower="$(printf '%s' "$rom" | tr '[:upper:]' '[:lower:]')"
+  case "$core:$rom_lower" in
+    gpsp:*.zip|gpsp_rumble:*.zip)
+      [ -x "$ZIP_EXTRACTOR" ] || {
+        toast "缺少 ZIP 解压工具"
+        return 1
+      }
+      mkdir -p "$RA_TEMP_ROM_DIR" || {
+        toast "无法建立临时 ROM 目录"
+        return 1
+      }
+      temp_rom="$RA_TEMP_ROM_DIR/game-$$.gba"
+      rm -f "$temp_rom"
+      printf '[zip] source=%s temporary=%s\n' "$rom" "$temp_rom" >> "$LOG_FILE"
+      if ! "$ZIP_EXTRACTOR" "$rom" "$temp_rom" >> "$LOG_FILE" 2>&1; then
+        rm -f "$temp_rom"
+        toast "ZIP 中未找到唯一的 GBA 游戏"
+        return 1
+      fi
+      launch_rom="$temp_rom"
+      ;;
+  esac
+
+  launch_ra64 "$launch_rom" "$selected_core" "$core"
   launch_rc=$?
+  if [ -n "$temp_rom" ]; then
+    rm -f "$temp_rom"
+    rmdir "$RA_TEMP_ROM_DIR" 2>/dev/null || true
+    rmdir "${RA_TEMP_ROM_DIR%/GBA}" 2>/dev/null || true
+  fi
   if [ "$launch_rc" -ne 0 ]; then
     printf '[launcher] ra64 failed choice=%s rc=%s\n' "$core" "$launch_rc" >> "$LOG_FILE"
     toast "64 位核心启动失败，请查看日志"

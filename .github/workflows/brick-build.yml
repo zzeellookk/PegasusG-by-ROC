@@ -121,6 +121,7 @@ jobs:
           test -x "$binary"
           aarch64-linux-gnu-readelf -h "$binary" | grep -q 'Machine:.*AArch64'
           test -x "$full/Apps/PegasusG/launch.sh"
+          test -x "$full/Apps/PegasusG/extract_gba_zip.sh"
           test -s "$full/Apps/PegasusG/config.json"
           test -s "$full/Apps/PegasusG/icon.png"
           test -s "$full/Apps/PegasusG/assets/ui/pegasus_g.png"

@@ -77,6 +77,7 @@ stage_runtime() {
   mkdir -p "$app_dir/cores"
   cp "$BUILD_DIR/pegasusg_by_roc" "$app_dir/pegasusg_by_roc"
   cp "$SELF_DIR/launcher/launch.sh" "$app_dir/launch.sh"
+  cp "$SELF_DIR/launcher/extract_gba_zip.sh" "$app_dir/extract_gba_zip.sh"
   cp "$SELF_DIR/launcher/autostart_ctl.sh" "$app_dir/autostart_ctl.sh"
   cp "$SELF_DIR/launcher/autostart_launch.sh" "$app_dir/autostart_launch.sh"
   for core in mgba_libretro.so gpsp_libretro.so gpsp_rumble_libretro.so \
