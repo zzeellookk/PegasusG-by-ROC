@@ -40,7 +40,7 @@ jobs:
           dpkg --add-architecture arm64
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates git \
+            ca-certificates git make \
             g++-aarch64-linux-gnu pkg-config python3 unzip \
             libsdl2-dev:arm64 libsdl2-image-dev:arm64 \
             libsdl2-ttf-dev:arm64 libasound2-dev:arm64
@@ -48,6 +48,31 @@ jobs:
 
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Build dedicated AArch64 gpSP rumble core
+        shell: bash
+        env:
+          GPSP_REVISION: 5b6e751f4abf368509146cd143c949c1946ac1ae
+        run: |
+          set -euo pipefail
+          source_dir="$RUNNER_TEMP/gpsp-rumble"
+          git clone https://github.com/libretro/gpsp.git "$source_dir"
+          git -C "$source_dir" checkout --detach "$GPSP_REVISION"
+          test "$(git -C "$source_dir" rev-parse HEAD)" = "$GPSP_REVISION"
+
+          make -C "$source_dir" -j2 \
+            platform=arm64 \
+            CC=aarch64-linux-gnu-gcc \
+            CXX=aarch64-linux-gnu-g++ \
+            AR=aarch64-linux-gnu-ar
+          aarch64-linux-gnu-strip "$source_dir/gpsp_libretro.so"
+          cp "$source_dir/gpsp_libretro.so" Brick/cores/gpsp_rumble_libretro.so
+
+          aarch64-linux-gnu-readelf -h Brick/cores/gpsp_rumble_libretro.so \
+            | grep -q 'Class:.*ELF64'
+          aarch64-linux-gnu-readelf -h Brick/cores/gpsp_rumble_libretro.so \
+            | grep -q 'Machine:.*AArch64'
+          sha256sum Brick/cores/gpsp_rumble_libretro.so
 
       - name: Build Brick install ZIP
         id: build
@@ -102,7 +127,8 @@ jobs:
           test "$(find "$full/Apps/PegasusG/assets/music" -maxdepth 1 -type f -name '*.mp3' | wc -l)" -eq 11
           test -x "$update/Apps/PegasusG/pegasusg_by_roc"
           test ! -e "$full/Apps/PegasusG/ffmpeg"
-          for core in mgba_libretro.so gpsp_libretro.so vbam_libretro.so vba_next_libretro.so; do
+          for core in mgba_libretro.so gpsp_libretro.so gpsp_rumble_libretro.so \
+              vbam_libretro.so vba_next_libretro.so; do
             full_core="$full/Apps/PegasusG/cores/$core"
             update_core="$update/Apps/PegasusG/cores/$core"
             test -s "$full_core"

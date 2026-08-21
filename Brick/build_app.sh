@@ -79,7 +79,8 @@ stage_runtime() {
   cp "$SELF_DIR/launcher/launch.sh" "$app_dir/launch.sh"
   cp "$SELF_DIR/launcher/autostart_ctl.sh" "$app_dir/autostart_ctl.sh"
   cp "$SELF_DIR/launcher/autostart_launch.sh" "$app_dir/autostart_launch.sh"
-  for core in mgba_libretro.so gpsp_libretro.so vbam_libretro.so vba_next_libretro.so; do
+  for core in mgba_libretro.so gpsp_libretro.so gpsp_rumble_libretro.so \
+      vbam_libretro.so vba_next_libretro.so; do
     [ -f "$CORE_SOURCE_DIR/$core" ] || {
       echo "missing Brick AArch64 core: $CORE_SOURCE_DIR/$core" >&2
       exit 4
@@ -130,6 +131,7 @@ common = [
     "version.txt",
     "cores/mgba_libretro.so",
     "cores/gpsp_libretro.so",
+    "cores/gpsp_rumble_libretro.so",
     "cores/vbam_libretro.so",
     "cores/vba_next_libretro.so",
 ]

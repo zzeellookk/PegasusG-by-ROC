@@ -20,6 +20,7 @@ complete license and source code.
 | `assets/cores/vbam_libretro.so` | https://github.com/libretro/vbam-libretro | `e8b2875d6cad10fc3c7c9f57bb5f1acc324d7c10` | GPL-2.0 and component notices |
 | `assets/cores/vba_next_libretro.so` | https://github.com/libretro/vba-next | `2b96fd3a77025f3083daf61126b1852d5e0eace7` | GPL-2.0 |
 | `assets/cores/gpsp_rumble_libretro.so` | User-provided gpSP rumble variant | Verify with the corresponding source package before redistribution | Must follow the variant's source license |
+| `Brick/cores/gpsp_rumble_libretro.so` | https://github.com/libretro/gpsp | `5b6e751f4abf368509146cd143c949c1946ac1ae` | GPL-2.0; built by Brick CI |
 
 License texts available locally:
 

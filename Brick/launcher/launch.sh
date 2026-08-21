@@ -8,6 +8,8 @@ RA_DIR="/mnt/SDCARD/RetroArch"
 RA_BIN="$RA_DIR/ra64.trimui"
 CORE_DIR="$APP_DIR/cores"
 GBA_DIR="/mnt/SDCARD/Emus/GBA"
+RUMBLE_CORE_OPTIONS="$STATE_DIR/gpsp-rumble-options.cfg"
+RUMBLE_RA_APPEND="$STATE_DIR/gpsp-rumble-append.cfg"
 
 mkdir -p "$STATE_DIR"
 cd "$APP_DIR" || exit 1
@@ -38,16 +40,25 @@ toast() {
 
 core_path() {
   case "$1" in
-    gpsp|gpsp_rumble) printf '%s\n' "$CORE_DIR/gpsp_libretro.so" ;;
+    gpsp_rumble) printf '%s\n' "$CORE_DIR/gpsp_rumble_libretro.so" ;;
+    gpsp) printf '%s\n' "$CORE_DIR/gpsp_libretro.so" ;;
     vbam) printf '%s\n' "$CORE_DIR/vbam_libretro.so" ;;
     vba_next) printf '%s\n' "$CORE_DIR/vba_next_libretro.so" ;;
     *) printf '%s\n' "$CORE_DIR/mgba_libretro.so" ;;
   esac
 }
 
+prepare_rumble_config() {
+  printf 'gpsp_rumble = "enabled"\n' > "$RUMBLE_CORE_OPTIONS"
+  printf 'core_options_path = "%s"\n' "$RUMBLE_CORE_OPTIONS" > "$RUMBLE_RA_APPEND"
+  printf '[rumble] forced gpsp_rumble=enabled options=%s\n' \
+    "$RUMBLE_CORE_OPTIONS" >> "$LOG_FILE"
+}
+
 launch_ra64() {
   rom="$1"
   core_file="$2"
+  core_choice="$3"
 
   [ -x "$RA_BIN" ] || { toast "缺少 64 位 RetroArch"; return 1; }
   [ -f "$core_file" ] || { toast "缺少 64 位核心"; return 1; }
@@ -62,7 +73,13 @@ launch_ra64() {
   printf '[ra64] binary=%s core=%s rom=%s\n' "$RA_BIN" "$core_file" "$rom" >> "$LOG_FILE"
   (
     cd "$RA_DIR" || exit 1
-    HOME="$RA_DIR/" "$RA_BIN" -v -L "$core_file" "$rom"
+    if [ "$core_choice" = "gpsp_rumble" ]; then
+      prepare_rumble_config
+      HOME="$RA_DIR/" "$RA_BIN" -v --appendconfig "$RUMBLE_RA_APPEND" \
+        -L "$core_file" "$rom"
+    else
+      HOME="$RA_DIR/" "$RA_BIN" -v -L "$core_file" "$rom"
+    fi
   ) >> "$LOG_FILE" 2>&1
 }
 
@@ -82,7 +99,7 @@ launch_game() {
   printf '[launcher] choice=%s core=%s rom=%s\n' "$core" "$selected_core" "$rom" >> "$LOG_FILE"
 
   # 不在天马中解压 ROM；.gba、.zip 等路径原样交给 RetroArch。
-  launch_ra64 "$rom" "$selected_core"
+  launch_ra64 "$rom" "$selected_core" "$core"
   launch_rc=$?
   if [ "$launch_rc" -ne 0 ]; then
     printf '[launcher] ra64 failed choice=%s rc=%s\n' "$core" "$launch_rc" >> "$LOG_FILE"
